@@ -731,32 +731,30 @@
             s.scale.copy(s.userData.baseScale);
             if (s.material) { s.material.color.set(0xffffff); s.material.opacity = 1.0; }
             s.visible = false;
+            if (s.userData) { s.userData.showTimestamp = null; s.userData.isGrabbed = false; }
         }
 
         function highlightLyricSprite(i) {
-            // hide all sprites except the active one
-            for (let j = 0; j < lyricsSprites.length; j++) {
-                const sj = lyricsSprites[j];
-                if (!sj) continue;
-                if (j === i) {
-                    sj.visible = true;
-                } else {
-                    sj.visible = false;
-                }
-            }
+            // When a token is highlighted, mark it to stay visible for 10s
+            const now = performance.now();
             const s = lyricsSprites[i];
             if (!s) return;
+            // ensure visible and reset fade state
+            s.visible = true;
+            s.userData = s.userData || {};
+            s.userData.showTimestamp = now + 10000; // visible for 10s
+            s.userData.fadeDuration = 2000; // 2s fade after show time
             // pop the active sprite: scale up and tint
             s.scale.copy(s.userData.baseScale).multiplyScalar(2.2);
             if (s.material) { s.material.color.set(0x00ff96); s.material.opacity = 1.0; }
             // animate scale back to base over time
-            const start = performance.now();
+            const start = now;
             const duration = 320;
             const fromScale = s.scale.clone();
             const toScale = s.userData.baseScale.clone();
             (function animatePop(){
-                const now = performance.now();
-                const t = Math.min(1, (now - start) / duration);
+                const now2 = performance.now();
+                const t = Math.min(1, (now2 - start) / duration);
                 s.scale.lerpVectors(fromScale, toScale, t);
                 if (t < 1) requestAnimationFrame(animatePop);
             })();
@@ -1192,6 +1190,27 @@
                         displayText += `| Scale: ${shapeScale.toFixed(2)}`;
                     } else {
                         displayText += `| MODE: COLOR SHIFT`;
+                    }
+
+                    // Fade-out logic: after showTimestamp passes, slowly fade opacity then hide
+                    if (ud && ud.showTimestamp) {
+                        if (now > ud.showTimestamp) {
+                            const fadeElapsed = now - ud.showTimestamp;
+                            const fd = ud.fadeDuration || 2000;
+                            const tFade = Math.min(1, fadeElapsed / fd);
+                            if (s.material) s.material.opacity = Math.max(0, 1 - tFade);
+                            // gently ease scale back toward base while fading
+                            if (ud.baseScale) s.scale.lerp(ud.baseScale, 0.05 + 0.45 * (1 - (1 - tFade)));
+                            if (tFade >= 1) {
+                                s.visible = false;
+                                ud.showTimestamp = null;
+                                ud.isGrabbed = false;
+                            }
+                        } else {
+                            // ensure visible and opaque while within show window
+                            s.visible = true;
+                            if (s.material) s.material.opacity = 1.0;
+                        }
                     }
                     previousHandDist = dist;
                 } else {
