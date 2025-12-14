@@ -518,6 +518,10 @@
         let lyricsIndex = 0;
         let lyricsTimer = null;
         let isLyricsPlaying = false;
+        // 3D lyric sprites
+        let lyricsGroup = null;
+        let lyricsSprites = [];
+        let lyricsBaseScale = 1.0;
 
         // Fetch lyrics from a public, free API (lyrics.ovh)
         async function fetchLyrics() {
@@ -571,7 +575,8 @@
                 statusEl.innerText = `Fetched ${lyricsWords.length} tokens.`;
                 playBtn.disabled = false;
                 fetchBtn.disabled = false;
-                // Show first word as preview
+                // Create 3D sprites for each token and show first word as preview
+                createLyricSprites(lyricsWords);
                 updateLyricsDisplay();
             } catch (err) {
                 statusEl.innerText = 'Network error fetching lyrics. See debug panel/console for details.';
@@ -599,6 +604,8 @@
             lyricsTimer = setInterval(() => {
                 showNextToken();
             }, msPerWord);
+            // also highlight the current sprite
+            highlightLyricSprite(lyricsIndex);
         }
 
         function pauseLyrics() {
@@ -625,6 +632,8 @@
                 return;
             }
             updateLyricsDisplay();
+            // highlight corresponding 3D sprite
+            highlightLyricSprite(lyricsIndex);
         }
 
         function updateLyricsDisplay() {
@@ -642,6 +651,88 @@
                 display.innerText = token;
                 display.style.display = 'inline-block';
             }
+        }
+
+        // Create a canvas texture for a word
+        function createWordTexture(word) {
+            const padding = 18;
+            const fontSize = 48;
+            const font = `${fontSize}px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif`;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = font;
+            const metrics = ctx.measureText(word || ' ');
+            const w = Math.max(64, Math.ceil(metrics.width) + padding * 2);
+            const h = fontSize + padding * 2;
+            canvas.width = w; canvas.height = h;
+            const cx = canvas.getContext('2d');
+            // Background transparent, draw glow
+            cx.clearRect(0,0,w,h);
+            cx.font = font;
+            cx.textAlign = 'center';
+            cx.textBaseline = 'middle';
+            // shadow/glow
+            cx.fillStyle = 'rgba(255,255,255,1)';
+            cx.shadowColor = 'rgba(0,0,0,0.7)';
+            cx.shadowBlur = 10;
+            cx.fillText(word, w/2, h/2);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // Create 3D sprites for each lyric token
+        function createLyricSprites(tokens) {
+            // remove previous group
+            if (!scene) return;
+            if (lyricsGroup) { scene.remove(lyricsGroup); lyricsSprites = []; }
+            lyricsGroup = new THREE.Group();
+            const boxSize = 18;
+            for (let i = 0; i < tokens.length; i++) {
+                const t = tokens[i];
+                const tex = createWordTexture(t === '\n' ? '' : t);
+                const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+                const sprite = new THREE.Sprite(mat);
+                // random initial positions within a box
+                sprite.position.set((Math.random()-0.5)*boxSize, (Math.random()-0.5)*boxSize*0.6, (Math.random()-0.5)*boxSize);
+                const scale = 0.5 + (Math.min(120, (t||'').length) / 40);
+                sprite.scale.set(scale * 1.2, scale * 0.5, 1);
+                sprite.userData = { baseScale: sprite.scale.clone(), index: i };
+                lyricsGroup.add(sprite);
+                lyricsSprites.push(sprite);
+            }
+            // center group and add to scene
+            lyricsGroup.position.set(0, 4, 0);
+            scene.add(lyricsGroup);
+        }
+
+        function resetLyricSprite(i) {
+            const s = lyricsSprites[i];
+            if (!s) return;
+            s.scale.copy(s.userData.baseScale);
+            if (s.material) s.material.color.set(0xffffff);
+        }
+
+        function highlightLyricSprite(i) {
+            // reset previous
+            for (let j=0;j<lyricsSprites.length;j++) {
+                if (j === i) continue;
+                resetLyricSprite(j);
+            }
+            const s = lyricsSprites[i];
+            if (!s) return;
+            // scale up and tint
+            s.scale.copy(s.userData.baseScale).multiplyScalar(1.8);
+            if (s.material) s.material.color.set(0x00ff96);
+            // slight pop animation: lerp back to base over time
+            const start = performance.now();
+            const duration = 400;
+            const fromScale = s.scale.clone();
+            const toScale = s.userData.baseScale.clone();
+            (function animatePop(){
+                const now = performance.now();
+                const t = Math.min(1, (now - start) / duration);
+                s.scale.lerpVectors(fromScale, toScale, t);
+                if (t < 1) requestAnimationFrame(animatePop);
+            })();
         }
 
         // --- Debug panel helpers ---
