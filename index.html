@@ -390,7 +390,7 @@
                 <button id="play-lyrics" class="btn" onclick="toggleLyricsPlay()" disabled>▶ Play</button>
                 <div style="display:flex;align-items:center;gap:8px;margin-left:8px;">
                     <label style="color:rgba(255,255,255,0.65);font-size:12px;margin-right:4px;">WPM</label>
-                    <input id="lyrics-wpm" type="range" min="60" max="400" value="180" style="width:100px;" oninput="document.getElementById('wpm-val').innerText=this.value" />
+                    <input id="lyrics-wpm" type="range" min="1" max="400" step="1" value="180" style="width:100px;" oninput="document.getElementById('wpm-val').innerText=this.value" />
                     <span id="wpm-val" style="color:rgba(255,255,255,0.8);">180</span>
                 </div>
             </div>
