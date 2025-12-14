@@ -574,8 +574,10 @@
                 // Show first word as preview
                 updateLyricsDisplay();
             } catch (err) {
-                statusEl.innerText = 'Network error fetching lyrics. See console for details.';
+                statusEl.innerText = 'Network error fetching lyrics. See debug panel/console for details.';
                 console.error('Lyrics fetch error', { url, err });
+                // Surface error details in the debug panel for easier diagnosis
+                try { updateDebugPanel(url, 'FAILED', err.stack || err.message || String(err)); } catch (e) { /* ignore */ }
                 playBtn.disabled = true;
                 fetchBtn.disabled = false;
             }
