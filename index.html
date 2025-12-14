@@ -489,6 +489,7 @@
         // Multi-Hand
         let cursorMeshes = [];
         let pointers = [new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0)];
+        let prevPointers = [new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0)];
         let handGestures = ['open', 'open']; 
         let activeHandCount = 0;
         let shapeScale = 1.0;
@@ -1627,6 +1628,15 @@
                         const handIdx = (handGrabbedLyric[0] === i) ? 0 : 1;
                         // If gesture released, drop
                         if (handGestures[handIdx] !== 'pinch') {
+                            // compute release velocity from pointer motion so the sprite doesn't snap back
+                            try {
+                                const handDelta = pointers[handIdx].clone().sub(prevPointers[handIdx] || new THREE.Vector3());
+                                // scale to give a pleasing throw
+                                ud.velocity = ud.velocity || new THREE.Vector3();
+                                ud.velocity.copy(handDelta.multiplyScalar(8));
+                            } catch (e) { /* ignore */ }
+                            // set new base position to current so floating doesn't snap back
+                            ud.basePos = s.position.clone();
                             handGrabbedLyric[handIdx] = null;
                             ud.isGrabbed = false;
                         } else if (pointers[handIdx]) {
@@ -1657,16 +1667,30 @@
 
                         // Floating motion when not grabbed
                         if (!ud.isGrabbed) {
-                            const t = time + (ud.floatPhase || 0);
-                            const amp = ud.floatAmp || 0.5;
-                            // gentle bobbing
-                            const base = ud.basePos || new THREE.Vector3();
-                            s.position.x = base.x + Math.sin(t * 0.6) * amp * 0.6;
-                            s.position.y = base.y + Math.sin(t * 1.1) * amp;
-                            s.position.z = base.z + Math.cos(t * 0.7) * amp * 0.5;
-                            // gently relax scale/color back to base
-                            s.scale.lerp(ud.baseScale, 0.08);
-                            if (s.material) { s.material.color.lerp(new THREE.Color(0xffffff), 0.06); s.material.opacity = 0.95; }
+                            // If there is release velocity, apply inertia first
+                            ud.velocity = ud.velocity || new THREE.Vector3();
+                            if (ud.velocity.lengthSq() > 0.0001) {
+                                s.position.add(ud.velocity);
+                                // damping
+                                ud.velocity.multiplyScalar(0.95);
+                                // when velocity is small, snap basePos to current and clear velocity
+                                if (ud.velocity.length() < 0.02) {
+                                    ud.velocity.set(0,0,0);
+                                    ud.basePos = s.position.clone();
+                                }
+                                // relax scale/color toward base while moving
+                                s.scale.lerp(ud.baseScale, 0.08);
+                                if (s.material) { s.material.color.lerp(new THREE.Color(0xffffff), 0.06); s.material.opacity = Math.min(1, (s.material.opacity || 1)); }
+                            } else {
+                                const t = time + (ud.floatPhase || 0);
+                                const amp = ud.floatAmp || 0.5;
+                                const base = ud.basePos || s.position.clone();
+                                s.position.x = base.x + Math.sin(t * 0.6) * amp * 0.6;
+                                s.position.y = base.y + Math.sin(t * 1.1) * amp;
+                                s.position.z = base.z + Math.cos(t * 0.7) * amp * 0.5;
+                                s.scale.lerp(ud.baseScale, 0.08);
+                                if (s.material) { s.material.color.lerp(new THREE.Color(0xffffff), 0.06); s.material.opacity = 0.95; }
+                            }
                         }
                     }
                 }
@@ -1794,6 +1818,12 @@
             }
 
             composer.render();
+
+            // Update previous pointers for next-frame velocity calculations
+            for (let h = 0; h < 2; h++) {
+                if (!prevPointers[h]) prevPointers[h] = new THREE.Vector3();
+                if (pointers[h]) prevPointers[h].copy(pointers[h]);
+            }
         }
 
         function onWindowResize() {
