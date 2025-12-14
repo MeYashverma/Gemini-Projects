@@ -1192,26 +1192,7 @@
                         displayText += `| MODE: COLOR SHIFT`;
                     }
 
-                    // Fade-out logic: after showTimestamp passes, slowly fade opacity then hide
-                    if (ud && ud.showTimestamp) {
-                        if (now > ud.showTimestamp) {
-                            const fadeElapsed = now - ud.showTimestamp;
-                            const fd = ud.fadeDuration || 2000;
-                            const tFade = Math.min(1, fadeElapsed / fd);
-                            if (s.material) s.material.opacity = Math.max(0, 1 - tFade);
-                            // gently ease scale back toward base while fading
-                            if (ud.baseScale) s.scale.lerp(ud.baseScale, 0.05 + 0.45 * (1 - (1 - tFade)));
-                            if (tFade >= 1) {
-                                s.visible = false;
-                                ud.showTimestamp = null;
-                                ud.isGrabbed = false;
-                            }
-                        } else {
-                            // ensure visible and opaque while within show window
-                            s.visible = true;
-                            if (s.material) s.material.opacity = 1.0;
-                        }
-                    }
+                    
                     previousHandDist = dist;
                 } else {
                     previousHandDist = 0;
