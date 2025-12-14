@@ -254,9 +254,9 @@
         /* Lyrics / Music Mode Overlay */
         #lyrics-overlay {
             position: absolute;
-            top: 50%;
+            top: 6%;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translateX(-50%);
             pointer-events: none;
             z-index: 30;
             text-align: center;
@@ -619,6 +619,8 @@
             pauseLyrics();
             lyricsIndex = 0;
             updateLyricsDisplay();
+            // hide all sprites
+            for (let i = 0; i < lyricsSprites.length; i++) resetLyricSprite(i);
         }
 
         function showNextToken() {
@@ -679,52 +681,67 @@
             return new THREE.CanvasTexture(canvas);
         }
 
-        // Create 3D sprites for each lyric token
+        // Create 3D sprites for each lyric token (large, one-at-a-time visibility)
         function createLyricSprites(tokens) {
-            // remove previous group
             if (!scene) return;
+            // remove previous group
             if (lyricsGroup) { scene.remove(lyricsGroup); lyricsSprites = []; }
             lyricsGroup = new THREE.Group();
-            const boxSize = 18;
+            const boxSize = 14;
             for (let i = 0; i < tokens.length; i++) {
                 const t = tokens[i];
                 const tex = createWordTexture(t === '\n' ? '' : t);
                 const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
                 const sprite = new THREE.Sprite(mat);
-                // random initial positions within a box
-                sprite.position.set((Math.random()-0.5)*boxSize, (Math.random()-0.5)*boxSize*0.6, (Math.random()-0.5)*boxSize);
-                const scale = 0.5 + (Math.min(120, (t||'').length) / 40);
-                sprite.scale.set(scale * 1.2, scale * 0.5, 1);
-                sprite.userData = { baseScale: sprite.scale.clone(), index: i };
+                // spread in a shallow cloud but keep relatively centered
+                sprite.position.set((Math.random()-0.5)*boxSize, (Math.random()-0.2)*boxSize*0.6, (Math.random()-0.5)*boxSize*0.6);
+                // make base scale significantly larger so word textures are readable
+                const lengthFactor = Math.min(1.8, Math.max(0.6, (t||'').length / 8));
+                const baseX = 4.0 * lengthFactor;
+                const baseY = 1.6 * lengthFactor;
+                sprite.scale.set(baseX, baseY, 1);
+                sprite.userData = { baseScale: new THREE.Vector3(baseX, baseY, 1), index: i };
+                // hide all sprites initially; we'll show only the active one
+                sprite.visible = false;
                 lyricsGroup.add(sprite);
                 lyricsSprites.push(sprite);
             }
-            // center group and add to scene
+            // place group near the scene center but above origin
             lyricsGroup.position.set(0, 4, 0);
             scene.add(lyricsGroup);
+            // show first token preview if available
+            if (lyricsSprites.length > 0) {
+                lyricsSprites[0].visible = true;
+            }
         }
 
         function resetLyricSprite(i) {
             const s = lyricsSprites[i];
             if (!s) return;
             s.scale.copy(s.userData.baseScale);
-            if (s.material) s.material.color.set(0xffffff);
+            if (s.material) { s.material.color.set(0xffffff); s.material.opacity = 1.0; }
+            s.visible = false;
         }
 
         function highlightLyricSprite(i) {
-            // reset previous
-            for (let j=0;j<lyricsSprites.length;j++) {
-                if (j === i) continue;
-                resetLyricSprite(j);
+            // hide all sprites except the active one
+            for (let j = 0; j < lyricsSprites.length; j++) {
+                const sj = lyricsSprites[j];
+                if (!sj) continue;
+                if (j === i) {
+                    sj.visible = true;
+                } else {
+                    sj.visible = false;
+                }
             }
             const s = lyricsSprites[i];
             if (!s) return;
-            // scale up and tint
-            s.scale.copy(s.userData.baseScale).multiplyScalar(1.8);
-            if (s.material) s.material.color.set(0x00ff96);
-            // slight pop animation: lerp back to base over time
+            // pop the active sprite: scale up and tint
+            s.scale.copy(s.userData.baseScale).multiplyScalar(2.2);
+            if (s.material) { s.material.color.set(0x00ff96); s.material.opacity = 1.0; }
+            // animate scale back to base over time
             const start = performance.now();
-            const duration = 400;
+            const duration = 320;
             const fromScale = s.scale.clone();
             const toScale = s.userData.baseScale.clone();
             (function animatePop(){
